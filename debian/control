@@ -1,0 +1,17 @@
+Source: spotty
+Section: sound
+Priority: extra
+Maintainer: Pami Ketolainen <pami.ketolainen@gmail.com>
+Build-Depends: debhelper (>= 7.0.50~), python-setuptools
+Standards-Version: 3.9.1
+#Homepage:
+#Vcs-Git: git://git.debian.org/collab-maint/spotty.git
+#Vcs-Browser: http://git.debian.org/?p=collab-maint/spotty.git;a=summary
+
+Package: spotty
+Architecture: all
+Depends: ${python:Depends}, ${misc:Depends},
+    spotify-client-qt (>= 0.4.8)
+Description: Spotify sidekick
+ This program provides media key control and song info notifications for
+ Spotify Linux preview
