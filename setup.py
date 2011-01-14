@@ -11,7 +11,8 @@ setup(
     url = "http://to.be.done",
     packages = find_packages(),
     entry_points = { "console_scripts": [
-            "spotty = spotty.core:main"]
+            "spotty = spotty.core:main",
+            "spotty-cli = spotty.cli:main"]
             },
     include_package_data = True
     )
