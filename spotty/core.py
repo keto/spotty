@@ -93,7 +93,7 @@ class Notifier(object):
         cover = cover or DEFAULT_ICON
         self._notifyid = self.notifyservice.Notify(
                 "spotty", self._notifyid, cover, artist,
-                "%s\n %s (%s)" % (title, album , year), [], {}, 2)
+                "%s\n %s (%s)" % (title, album , year), [], {}, 3000)
 
 
 class SpotifyControl():
