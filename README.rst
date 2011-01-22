@@ -57,4 +57,4 @@ Planned features
 Links
 =====
 
-.. taget-notes::
+.. target-notes::
