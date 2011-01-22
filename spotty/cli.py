@@ -18,27 +18,37 @@
 
 """Spotty commandline interface."""
 
+import sys, gobject
 from optparse import OptionParser
 from spotty.core import SpotifyControl
+from dbus.mainloop.glib import DBusGMainLoop
 
 def parse_opts():
     """Parses commandline arguments."""
     parser = OptionParser()
-    parser.add_option("-n", "--next", action="store_true")
-    parser.add_option("-p", "--previous", action="store_true")
-    parser.add_option("-P", "--play", action="store_true")
+    parser.add_option("-n", "--next", action="store_const", dest="command",
+             const="Next")
+    parser.add_option("-p", "--previous", action="store_const", dest="command",
+             const="Previous")
+    parser.add_option("-P", "--paly", action="store_const", dest="command",
+             const="Play")
     return parser.parse_args()
+
+def execute(spotify, command):
+    spotify.cb_key_handler(command)
+    sys.exit()
+
 
 def main():
     """Commandline entry point."""
+    DBusGMainLoop(set_as_default=True)
     options, args = parse_opts()
+    if not options.command:
+        return
     spot = SpotifyControl()
-    if options.play:
-        spot.cb_key_handler("Play")
-    elif options.next:
-        spot.cb_key_handler("Next")
-    elif options.previous:
-        spot.cb_key_handler("Previous")
+    loop = gobject.MainLoop()
+    gobject.timeout_add(500, execute, spot, options.command)
+    loop.run()
 
-if __name__ = "__main__":
+if __name__ == "__main__":
     main()

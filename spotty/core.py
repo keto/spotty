@@ -242,9 +242,12 @@ def main():
     """Entry point"""
     # TODO configuration file handling and commandline options
     DBusGMainLoop(set_as_default=True)
-    key_listener = MediaKeyListener()
     spotify = SpotifyControl()
-    key_listener.add_handler(spotify.cb_key_handler)
+    try:
+        key_listener = MediaKeyListener()
+        key_listener.add_handler(spotify.cb_key_handler)
+    except Exception, exobj:
+        LOG.error("MediaKeyListener failed: %s" % exobj)
     if NOTIFY:
         fetcher = None
         if COVER:
