@@ -1,3 +1,11 @@
+spotty (0.1.1) unstable; urgency=low
+
+  * Moved notification provider to separate module
+  * Made notification class more suitable for common use
+  * Common logging in spotty package (needs more work)
+
+ -- Pami Ketolainen <pami.ketolainen@gmail.com>  Sun, 23 Jan 2011 01:18:27 +0200
+
 spotty (0.1) unstable; urgency=low
 
   * Initial release
