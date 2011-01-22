@@ -23,7 +23,7 @@
 """Various Spotify controller related classes."""
 
 import dbus, gobject, os, signal
-import logging
+
 from dbus.mainloop.glib import DBusGMainLoop
 try:
     import indicate
@@ -31,75 +31,31 @@ try:
 except ImportError:
     INDICATE = False
 
-from pkg_resources import resource_filename
-
+from spotty import LOG
 from spotty.fetchart import SpotifyCoverFetcher
+from spotty.notify import get_notificator
 
-# TODO: Propper logging configuration
-LOG = logging.getLogger()
-LOG.addHandler(logging.StreamHandler())
-LOG.setLevel(logging.DEBUG)
-
-DEFAULT_ICON = os.path.abspath(resource_filename(__name__, "icon_spotify.png"))
 
 # Set to False to disable notifications
 NOTIFY = True
 # Set to false to disable cover fetching
 COVER = True
 
+# Mappings for xesam keys and simpler ones used internally
+META_MAP = {"album": "xesam:album",
+            "artist": "xesam:artist",
+            "title": "xesam:title",
+            "track": "xesam:trackNumber",
+            "date": "xesam:contentCreated",
+            "url": "xesam:url"}
+
 # TODO: Commandline parameters to disable different "services"
-
-class Notifier(object):
-    """Class for displaying song info notifications."""
-    def __init__(self, cover_fetcher=None):
-        """Constructor.
-        optional cover fetcher object used to fetch album art.
-        """
-        self._fetcher = cover_fetcher
-        self._notifyservice = None
-        self._notifyid = 0
-
-    @property
-    def notifyservice(self):
-        """Lazy binding to dbus notification interface."""
-        if self._notifyservice == None:
-            try:
-                bus = dbus.SessionBus()
-                proxy = bus.get_object(
-                        "org.freedesktop.Notifications",
-                        "/org/freedesktop/Notifications")
-                self._notifyservice = dbus.Interface(proxy,
-                        "org.freedesktop.Notifications")
-            except Exception, exobj:
-                LOG.error("Notification service connectin failed: %s" % exobj)
-        return self._notifyservice
-
-    def display_track(self, data):
-        """Display notification.
-        :param dict data: Dictionary containing song info
-        """
-        artist = data.get("artist", "Unknown").encode("latin-1")
-        album = data.get("album", "Unknown").encode("latin-1")
-        title = data.get("title", "Unknown").encode("latin-1")
-        url = data.get("url", None)
-        year = str(data.get("year", ""))
-        
-        cover = ""
-        if self._fetcher and url:
-            try:
-                cover = self._fetcher.fetch(artist, album, url)
-            except Exception, exobj:
-                LOG.error("failed to fetch cover: %s" % exobj)
-        cover = cover or DEFAULT_ICON
-        self._notifyid = self.notifyservice.Notify(
-                "spotty", self._notifyid, cover, artist,
-                "%s\n %s (%s)" % (title, album , year), [], {}, 3000)
 
 
 class SpotifyControl():
     """Class for controlling spotify through DBus."""
 
-    def __init__(self):
+    def __init__(self, cover_fetcher=None):
         """Constructor."""
         self.bus = dbus.SessionBus()
         # Register listener for spotify start up
@@ -107,11 +63,13 @@ class SpotifyControl():
                 "/org/freedesktop/DBus")
         proxy.connect_to_signal("NameOwnerChanged",
                 self.cb_spotify_spy)
+        self._fetcher = cover_fetcher
         self.spotifyservice = None
         self.connected = False
         self.connect()
         self.track_change_listeners = []
         self.state_change_listeners = []
+        self._current_track = None
 
     def cb_spotify_spy(self, *args):
         """DBus listener for spying spotify start/quit."""
@@ -157,14 +115,21 @@ class SpotifyControl():
             return
         if not data:
             return
-        for key in data:
-            for k in ["title", "artist", "album", "url"]:
-                if k in key:
-                    clear_data[k] = data[key]
-                    break
-        # Special case for year
-        clear_data["year"] = data.get("xesam:contentCreated", "").split("-")[0]
-        LOG.debug(str(data))
+        for key, name in META_MAP.items():
+            clear_data[key] = data.get(name, None)
+        # Parse year
+        if clear_data["date"]:
+            clear_data["year"] = clear_data["date"].split("-")[0]
+        else:
+            clear_data["year"] = None
+        if self._fetcher:
+            try:
+                clear_data["cover"] = self._fetcher.fetch(clear_data["artist"],
+                        clear_data["album"], track_id=clear_data["url"])
+            except Exception, exobj:
+                LOG.error("Fetching cover image failed: %s" % exobj)
+        LOG.debug(str(clear_data))
+        self._current_track = clear_data
         for listener in self.track_change_listeners:
             listener(clear_data)
 
@@ -242,20 +207,22 @@ def main():
     """Entry point"""
     # TODO configuration file handling and commandline options
     DBusGMainLoop(set_as_default=True)
-    spotify = SpotifyControl()
+    fetcher = None
+    if COVER:
+        fetcher = SpotifyCoverFetcher(
+                os.path.join(os.environ.get("HOME", "/tmp"),
+                        ".spotcovers"))
+    spotify = SpotifyControl(cover_fetcher=fetcher)
     try:
         key_listener = MediaKeyListener()
         key_listener.add_handler(spotify.cb_key_handler)
     except Exception, exobj:
         LOG.error("MediaKeyListener failed: %s" % exobj)
+
     if NOTIFY:
-        fetcher = None
-        if COVER:
-            fetcher = SpotifyCoverFetcher(
-                    os.path.join(os.environ.get("HOME", "/tmp"),
-                            ".spotcovers"))
-        notifier = Notifier(fetcher)
-        spotify.add_change_listener(notifier.display_track)
+        notifier = get_notificator()
+        spotify.add_change_listener(notifier.cb_track_changed)
+
     if INDICATE:
         indicator = IndicatorHandler()
         indicator.cb_status_changed(spotify.connected)

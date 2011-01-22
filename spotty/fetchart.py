@@ -23,6 +23,8 @@ import os
 import re
 import sys
 
+from spotty import LOG
+
 # META_API_URL + 'spotify:track:TRACKIDHASH'
 META_API_URL = "http://ws.spotify.com/lookup/1/.json?uri="
 # OPEN_URL + 'ALBUMIDHASH'
@@ -65,7 +67,7 @@ class SpotifyCoverFetcher(object):
             cover_file = "/tmp/spot-cover.png"
         # Get the open.spotify.com album page and parse cover image from it
         try:
-            print("fetching %s%s" % (OPEN_URL, album_id))
+            LOG.debug("fetching %s%s" % (OPEN_URL, album_id))
             url = urllib2.urlopen(OPEN_URL + album_id)
             webpage = url.read()
         except Exception, exobj:
@@ -87,7 +89,7 @@ class SpotifyCoverFetcher(object):
     def fetch(self, artist, album, track_id=None):
         """Return cover image file name or raise CoverError."""
         if not track_id:
-            print("Track ID needed")
+            LOG.error("Track ID needed")
             # TODO turn artist+album to spotify id
             return None
 
@@ -117,7 +119,7 @@ class SpotifyCoverFetcher(object):
 
         cover_file = self._check_cache(album_id)
         if not cover_file:
-            print("cover not in cache")
+            LOG.debug("cover not in cache")
             cover_file = self._fetch_image(album_id)
         return cover_file
 
