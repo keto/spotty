@@ -1,3 +1,9 @@
+spotty (0.1.2) unstable; urgency=low
+
+  * Improved CLI
+
+ -- Pami Ketolainen <pami.ketolainen@gmail.com>  Sun, 23 Jan 2011 02:43:46 +0200
+
 spotty (0.1.1) unstable; urgency=low
 
   * Moved notification provider to separate module

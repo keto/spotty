@@ -16,14 +16,14 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 #
-#     Code is for some part based on spotify-notify 
+#     Code is for some part based on spotify-notify
 #     by SveinT (sveint@gmail.com)
 #     http://code.google.com/p/spotify-notify/
 
 """Various Spotify controller related classes."""
 
-import dbus, gobject, os, signal
-
+import dbus, gobject, os, signal, logging
+from optparse import OptionParser
 from dbus.mainloop.glib import DBusGMainLoop
 try:
     import indicate
@@ -202,10 +202,19 @@ class IndicatorHandler(object):
             self._server.hide()
             self._visible = False
 
+def parse_args():
+    """Parses commandline arguments."""
+    parser = OptionParser()
+    parser.add_option("-d", "--debug", action="store_true",
+            help="Enable debug output")
+    return parser.parse_args()
 
 def main():
     """Entry point"""
     # TODO configuration file handling and commandline options
+    options, _ = parse_args()
+    if options.debug:
+        LOG.setLevel(logging.DEBUG)
     DBusGMainLoop(set_as_default=True)
     fetcher = None
     if COVER:

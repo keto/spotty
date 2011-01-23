@@ -18,8 +18,9 @@
 
 """Spotty commandline interface."""
 
-import sys, gobject
+import sys, gobject, logging, threading
 from optparse import OptionParser
+from spotty import LOG
 from spotty.core import SpotifyControl
 from dbus.mainloop.glib import DBusGMainLoop
 
@@ -32,23 +33,64 @@ def parse_opts():
              const="Previous")
     parser.add_option("-P", "--paly", action="store_const", dest="command",
              const="Play")
+    parser.add_option("-q", "--quiet", action="store_true",
+            help="Don't print track info")
+    parser.add_option("-d", "--debug", action="store_true",
+            help="Enable debug output")
     return parser.parse_args()
 
-def execute(spotify, command):
-    spotify.cb_key_handler(command)
-    sys.exit()
+class SpottyCLI(threading.Thread):
+    """Commandline Spottty operator."""
+    def __init__(self, quiet=False):
+        super(SpottyCLI, self).__init__()
+        self._loop = gobject.MainLoop()
+        self._spot = SpotifyControl()
+        self._spot.add_change_listener(self.cb_track_changed)
+        self._quiet = quiet
 
+    def run(self):
+        LOG.debug("Starting mainloop")
+        self._loop.run()
+        LOG.debug("Mainloop ended")
+
+    def terminate(self):
+        """Terminates the mainloop."""
+        if self._loop.is_running():
+            LOG.debug("Terminating mainloop")
+            self._loop.quit()
+
+    def send_command(self, command):
+        """Send given command to Spotify."""
+        LOG.debug("Sending command")
+        self._spot.cb_key_handler(command)
+        LOG.debug("Command sent")
+
+    def cb_track_changed(self, info):
+        """Spotty track_changed handler."""
+        LOG.debug("Track changed")
+        if not self._quiet:
+            artist = info.get("artist", u"")
+            title = info.get("title", u"")
+            print("%s - %s" % (artist, title))
+        self.terminate()
 
 def main():
     """Commandline entry point."""
     DBusGMainLoop(set_as_default=True)
-    options, args = parse_opts()
+    options, _ = parse_opts()
+    if options.debug:
+        LOG.setLevel(logging.DEBUG)
     if not options.command:
         return
-    spot = SpotifyControl()
-    loop = gobject.MainLoop()
-    gobject.timeout_add(500, execute, spot, options.command)
-    loop.run()
+
+    gobject.threads_init()
+    cli = SpottyCLI(options.quiet)
+    cli.start()
+    cli.send_command(options.command)
+    if options.command not in ["Previous"]:
+        cli.join(10)
+    cli.terminate()
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
