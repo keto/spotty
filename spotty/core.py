@@ -147,6 +147,8 @@ class SpotifyControl():
             return
         if key not in MediaKeyListener.KEYS:
             return
+        if key == "Play":
+            key = "PlayPause"
         self.spotifyservice.get_dbus_method(key,
                 "org.mpris.MediaPlayer2.Player")()
 
@@ -173,6 +175,7 @@ class MediaKeyListener():
 
     def cb_handle_mediakey(self, *mmkeys):
         """Media key event callback."""
+        LOG.debug("Got keys %s" % str(mmkeys))
         for key in mmkeys:
             if key not in self.KEYS:
                 continue
