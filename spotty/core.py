@@ -25,11 +25,15 @@
 import dbus, gobject, os, signal, logging
 from optparse import OptionParser
 from dbus.mainloop.glib import DBusGMainLoop
-try:
-    import indicate
-    INDICATE = True
-except ImportError:
-    INDICATE = False
+
+# Indicator does not work well and the module is quite big so disabling by default
+INDICATE = False
+if INDICATE:
+    try:
+        import indicate
+        INDICATE = True
+    except ImportError:
+        INDICATE = False
 
 from spotty import LOG
 from spotty.fetchart import SpotifyCoverFetcher
