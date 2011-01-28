@@ -26,15 +26,6 @@ import dbus, gobject, os, signal, logging
 from optparse import OptionParser
 from dbus.mainloop.glib import DBusGMainLoop
 
-# Indicator does not work well and the module is quite big so disabling by default
-INDICATE = False
-if INDICATE:
-    try:
-        import indicate
-        INDICATE = True
-    except ImportError:
-        INDICATE = False
-
 from spotty import LOG
 from spotty.fetchart import SpotifyCoverFetcher
 from spotty.notify import get_notificator
@@ -44,6 +35,8 @@ from spotty.notify import get_notificator
 NOTIFY = True
 # Set to false to disable cover fetching
 COVER = True
+# Indicator applet support (Not needed
+INDICATE = False
 
 # Mappings for xesam keys and simpler ones used internally
 META_MAP = {"album": "xesam:album",
@@ -53,7 +46,72 @@ META_MAP = {"album": "xesam:album",
             "date": "xesam:contentCreated",
             "url": "xesam:url"}
 
-# TODO: Commandline parameters to disable different "services"
+# TODO: Commandline parameters to disable different "plugins"
+
+
+class Signal(object):
+    """Simple signal class used to send signal between plugins."""
+
+    class Listener(object):
+        """Signal listener."""
+        def __init__(self, callback, priority, ignore_errors):
+            if not callable(callback):
+                raise TypeError("callback has to be callable")
+            if not isinstance(priority, int):
+                raise TypeError("priority has to be integer")
+            self._id = id(callback)
+            self.calback = callback
+            self.priority = priority
+            self.ignore_errors = ignore_errors
+
+        def __cmp__(self, obj):
+            if not isinstance(obj, Listener):
+                raise TypeError("can't compare %s to %s" %
+                        (type(self), type(obj)))
+            return cmp(self.priority, obj.priority)
+
+    def __init__(self, arguments):
+        """Constructor.
+        :param arguments: list of argument names accepted by signal
+        """
+        self._args = arguments
+        self.listeners = []
+
+    def connect(self, callback, priority=99, ignore_errors=True):
+        """Connect listener to signal.
+        :param listener: callable which should accept any keyword arguments
+        :param priority: listeners will be called in priority order
+            default is 99
+        :param ignore_errors: if True, exceptions from listener will be ignored
+        """
+        # TODO: prevent duplicate listeners
+        self.listeners.append(Listener(callback, priority, ignore_errors))
+        self.listeners.sort()
+
+    def disconnect(self, callback):
+        cb_id = id(callback)
+        for index, listener in enumerate(self.listeners):
+            if listener.id == cb_id:
+                self.listeners.pop(index)
+
+
+    def send(self, **kwargs):
+        """Dispatch signal
+        Takes list of keyword arguments to pass to listener
+        raises TypeError if bad argumen names provided
+        """
+        original_args = dict(kwargs)
+        # TODO check promised args
+        for listener in self.listeners:
+            try:
+                new = listener.callback(original_args, **kwargs)
+                kwargs.update(new)
+            except Exception, exobj:
+                if listener.ignore_errors:
+                    LOG.error("Signal %s callback %s failed: %s" %
+                            (self, listener, exobj))
+                else:
+                    raise
 
 
 class SpotifyControl():
@@ -189,25 +247,37 @@ class MediaKeyListener():
                 except Exception, exobj:
                     LOG.error("Key handler %s failed: %s" % (handler, exobj))
 
-class IndicatorHandler(object):
-    """Class for handling indicator applet."""
+class SpottyPlugin(object):
+    """Spotty plugin base class."""
+    # Plugins are singletons
+    __instance = None
+    #: Used to specify other required plugins
+    requires = []
 
-    def __init__(self):
-        self._server = indicate.indicate_server_ref_default()
-        self._server.set_type("music.spotify")
-        self._server.set_desktop_file(
-                "/usr/share/applications/spotify.desktop")
-        self._visible = False
+    @classmethod
+    def load(cls, controller):
+        """Plugin loader.
+        :param controller: The SpotifyControl instance
+        :returns: Plugin instance
+        """
+        if cls == SpottyPlugin:
+            raise RuntimeError("Tried to load plain base plugin")
+        if not cls.is_loaded():
+            cls.__instance = cls(controller)
+        return cls.__instance
 
-    def cb_status_changed(self, running):
-        if self._visible == running:
-            return
-        if running:
-            self._server.show()
-            self._visible = True
-        else:
-            self._server.hide()
-            self._visible = False
+    @classmethod
+    def is_loaded(cls):
+        return cls.__instance is not None
+
+    def __init__(self, controller):
+        """Constructor."""
+        pass
+
+    def unload(self):
+        """Plugin unloader."""
+        pass
+
 
 def parse_args():
     """Parses commandline arguments."""
