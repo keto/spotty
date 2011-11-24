@@ -184,6 +184,9 @@ class SpotifyControl():
             clear_data["year"] = clear_data["date"].split("-")[0]
         else:
             clear_data["year"] = None
+        if isinstance(clear_data["artist"], dbus.Array):
+            clear_data["artist"] = " - ".join(clear_data["artist"])
+        # TODO: Convert all the dbus data types
         if self._fetcher:
             try:
                 clear_data["cover"] = self._fetcher.fetch(clear_data["artist"],
