@@ -29,7 +29,6 @@ from spotty import LOG
 META_API_URL = "http://ws.spotify.com/lookup/1/.json?uri="
 # OPEN_URL + 'ALBUMIDHASH'
 OPEN_URL = "http://open.spotify.com/album/"
-IMG_URL = "http://open.spotify.com/image/"
 
 class CoverError(Exception):
     """Cover retrieval error class."""
@@ -47,7 +46,8 @@ class SpotifyCoverFetcher(object):
             except OSError:
                 self._cache = None
         self._cache = cache_dir
-        self._image_pat = re.compile('/image/(.*)" alt')
+        self._image_pat = re.compile(
+                "<img\s*id=\"cover-art\"\s*src=\"(.*)\".*>")
 
     def _check_cache(self, album_id):
         """Get image from cache if exists."""
@@ -76,7 +76,8 @@ class SpotifyCoverFetcher(object):
 
         matchobject = self._image_pat.search(webpage)
         if matchobject:
-            imageurl = IMG_URL + matchobject.group(1)
+            imageurl = matchobject.group(1)
+            LOG.debug("fetching %s", imageurl)
             try:
                 url = urllib2.urlopen(imageurl)
                 open(cover_file, "w").write(url.read())
