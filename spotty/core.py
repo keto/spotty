@@ -44,7 +44,8 @@ META_MAP = {"album": "xesam:album",
             "title": "xesam:title",
             "track": "xesam:trackNumber",
             "date": "xesam:contentCreated",
-            "url": "xesam:url"}
+            "url": "xesam:url",
+            "art_url": "mpris:artUrl"}
 
 # TODO: Commandline parameters to disable different "plugins"
 
@@ -187,10 +188,11 @@ class SpotifyControl():
         if isinstance(clear_data["artist"], dbus.Array):
             clear_data["artist"] = " - ".join(clear_data["artist"])
         # TODO: Convert all the dbus data types
-        if self._fetcher:
+        if self._fetcher and clear_data.get("art_url"):
+            LOG.debug("fetching art url %s" % clear_data["art_url"])
             try:
-                clear_data["cover"] = self._fetcher.fetch(clear_data["artist"],
-                        clear_data["album"], track_id=clear_data["url"])
+                clear_data["cover"] = self._fetcher.fetch(
+                         clear_data["art_url"])
             except Exception, exobj:
                 LOG.error("Fetching cover image failed: %s" % exobj)
         LOG.debug(str(clear_data))
