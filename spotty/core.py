@@ -47,33 +47,39 @@ META_MAP = {"album": "xesam:album",
 
 # TODO: Commandline parameters to disable different "plugins"
 
+class Listener(object):
+    """Wrapper class for signal listener callbacks."""
+    def __init__(self, callback, priority, ignore_errors):
+        if not callable(callback):
+            raise TypeError("callback has to be callable")
+        if not isinstance(priority, int):
+            raise TypeError("priority has to be integer")
+        self._callback = callback
+        self._priority = priority
+        self._ignore_errors = ignore_errors
+
+    def __call__(self, *args, **kwargs):
+        try:
+            return self._callback(*args, **kwargs)
+        except Exception as exc:
+            LOG.error("Listener %s (%s, %s) failed:%s" %
+                    (self, args, kwargs, exc))
+            if not self._ignore_errors:
+                raise
+
+    def __cmp__(self, obj):
+        if not isinstance(obj, Listener):
+            raise TypeError("can't compare %s to %s" %
+                    (type(self), type(obj)))
+        return cmp(self._priority, obj._priority)
+
+    def __str__(self):
+        return str(self._callback)
 
 class Signal(object):
     """Simple signal class used to send signal between plugins."""
-
-    class Listener(object):
-        """Signal listener."""
-        def __init__(self, callback, priority, ignore_errors):
-            if not callable(callback):
-                raise TypeError("callback has to be callable")
-            if not isinstance(priority, int):
-                raise TypeError("priority has to be integer")
-            self._id = id(callback)
-            self.calback = callback
-            self.priority = priority
-            self.ignore_errors = ignore_errors
-
-        def __cmp__(self, obj):
-            if not isinstance(obj, Listener):
-                raise TypeError("can't compare %s to %s" %
-                        (type(self), type(obj)))
-            return cmp(self.priority, obj.priority)
-
-    def __init__(self, arguments):
-        """Constructor.
-        :param arguments: list of argument names accepted by signal
-        """
-        self._args = arguments
+    def __init__(self):
+        """Constructor."""
         self.listeners = []
 
     def connect(self, callback, priority=99, ignore_errors=True):
@@ -83,37 +89,28 @@ class Signal(object):
             default is 99
         :param ignore_errors: if True, exceptions from listener will be ignored
         """
-        # TODO: prevent duplicate listeners
-        self.listeners.append(Listener(callback, priority, ignore_errors))
+        listener = Listener(callback, priority, ignore_errors)
+        self.listeners.append(listener)
+        # Keep in priority order
         self.listeners.sort()
 
     def disconnect(self, callback):
-        cb_id = id(callback)
+        cb_id = str(callback)
         for index, listener in enumerate(self.listeners):
-            if listener.id == cb_id:
+            if str(listener) == cb_id:
                 self.listeners.pop(index)
 
-
-    def send(self, **kwargs):
+    def send(self, *args, **kwargs):
         """Dispatch signal
         Takes list of keyword arguments to pass to listener
         raises TypeError if bad argumen names provided
         """
-        original_args = dict(kwargs)
-        # TODO check promised args
         for listener in self.listeners:
-            try:
-                new = listener.callback(original_args, **kwargs)
-                kwargs.update(new)
-            except Exception, exobj:
-                if listener.ignore_errors:
-                    LOG.error("Signal %s callback %s failed: %s" %
-                            (self, listener, exobj))
-                else:
-                    raise
+            new_args = listener(*args, **kwargs)
+            if isinstance(new_args, dict):
+                kwargs.update(new_args)
 
-
-class SpotifyControl():
+class SpotifyControl(object):
     """Class for controlling spotify through DBus."""
 
     def __init__(self, cover_fetcher=None):
@@ -123,16 +120,16 @@ class SpotifyControl():
         proxy = self.bus.get_object("org.freedesktop.DBus",
                 "/org/freedesktop/DBus")
         proxy.connect_to_signal("NameOwnerChanged",
-                self.cb_spotify_spy)
+                self._cb_spotify_spy)
         self._fetcher = cover_fetcher
         self.spotifyservice = None
         self.connected = False
         self.connect()
-        self.track_change_listeners = []
-        self.state_change_listeners = []
         self._current_track = None
+        self.track_changed = Signal()
+        self.state_changed = Signal()
 
-    def cb_spotify_spy(self, *args):
+    def _cb_spotify_spy(self, *args):
         """DBus listener for spying spotify start/quit."""
         try:
             name, old, new = args
@@ -143,14 +140,12 @@ class SpotifyControl():
         if not old and new:
             LOG.debug("Spotify appeared!")
             self.connect()
-            for callback in self.state_change_listeners:
-                callback(True)
+            self.state_changed.send(True)
         elif old and not new:
             LOG.debug("Spotify went away")
             self.spotifyservice = None
             self.connected = False
-            for callback in self.state_change_listeners:
-                callback(False)
+            self.state_changed.send(False)
         else:
             LOG.debug("Spotify dbus interface did something weird")
 
@@ -161,13 +156,13 @@ class SpotifyControl():
             self.spotifyservice = self.bus.get_object(
                     "com.spotify.qt", "/org/mpris/MediaPlayer2")
             self.spotifyservice.connect_to_signal(
-                    "PropertiesChanged", self.cb_track_changed)
+                    "PropertiesChanged", self._cb_track_changed)
             self.connected = True
         except Exception, exobj:
             LOG.error("Connection to Spotify failed: %s" % exobj)
         return self.connected
 
-    def cb_track_changed(self, *args):
+    def _cb_track_changed(self, *args):
         """Metadata change listener."""
         clear_data = {}
         try:
@@ -195,15 +190,7 @@ class SpotifyControl():
                 LOG.error("Fetching cover image failed: %s" % exobj)
         LOG.debug(str(clear_data))
         self._current_track = clear_data
-        for listener in self.track_change_listeners:
-            listener(clear_data)
-
-    def add_change_listener(self, callback):
-        """Add listener for track changes"""
-        self.track_change_listeners.append(callback)
-
-    def add_spotify_state_listener(self, callback):
-        self.state_change_listeners.append(callback)
+        self.track_changed.send(clear_data)
 
     def cb_key_handler(self, key):
         """Media key handler callback."""
@@ -298,7 +285,7 @@ def main():
     DBusGMainLoop(set_as_default=True)
     fetcher = None
     if COVER:
-        if os.environ.haskey("XDG_CACHE_HOME"):
+        if os.environ.has_key("XDG_CACHE_HOME"):
             cache = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
         else:
             cache = os.path.join(os.environ.get("HOME", ""), ".cache", "spotty")
@@ -312,7 +299,7 @@ def main():
 
     if NOTIFY:
         notifier = get_notificator()
-        spotify.add_change_listener(notifier.cb_track_changed)
+        spotify.track_changed.connect(notifier.cb_track_changed)
 
     loop = gobject.MainLoop()
     signal.signal(signal.SIGINT, lambda *args: loop.quit())
