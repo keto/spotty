@@ -300,9 +300,11 @@ def main():
     DBusGMainLoop(set_as_default=True)
     fetcher = None
     if COVER:
-        fetcher = SpotifyCoverFetcher(
-                os.path.join(os.environ.get("HOME", "/tmp"),
-                        ".spotcovers"))
+        if os.environ.haskey("XDG_CACHE_HOME"):
+            cache = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
+        else:
+            cache = os.path.join(os.environ.get("HOME", ""), ".cache", "spotty")
+        fetcher = SpotifyCoverFetcher(cache)
     spotify = SpotifyControl(cover_fetcher=fetcher)
     try:
         key_listener = MediaKeyListener()
