@@ -35,8 +35,6 @@ from spotty.notify import get_notificator
 NOTIFY = True
 # Set to false to disable cover fetching
 COVER = True
-# Indicator applet support (Not needed
-INDICATE = False
 
 # Mappings for xesam keys and simpler ones used internally
 META_MAP = {"album": "xesam:album",
@@ -315,11 +313,6 @@ def main():
     if NOTIFY:
         notifier = get_notificator()
         spotify.add_change_listener(notifier.cb_track_changed)
-
-    if INDICATE:
-        indicator = IndicatorHandler()
-        indicator.cb_status_changed(spotify.connected)
-        spotify.add_spotify_state_listener(indicator.cb_status_changed)
 
     loop = gobject.MainLoop()
     signal.signal(signal.SIGINT, lambda *args: loop.quit())

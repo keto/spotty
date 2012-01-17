@@ -25,7 +25,7 @@ Authors
 Pami "Keto" Ketolainen <pami.ketolainen@gmail.com>
 
 Code is for some part based on the original work spotify-notify_ by
-SveinT <sveint@gmail.com> and others.
+SveinT and others.
 
 .. _spotify-notify: http://code.google.com/p/spotify-notify/
 
@@ -35,24 +35,20 @@ Roadmap
 Current features
 ----------------
 
-- Song change notification
+- Song change notification with cover art
 
 - Media key binding
-
-- Basic indicator applet support
 
 Planned features
 ----------------
 
 - Zeitgeist integration
 
-- Indicator applet improvements
-
- - Displaying cover images
-
 - Plugin oriented architecture
 
 - Configuration UI
+
+- Contorl other spotify instances in LAN
 
 Links
 =====
