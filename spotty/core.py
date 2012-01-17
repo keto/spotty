@@ -181,16 +181,9 @@ class SpotifyControl(object):
         if isinstance(clear_data["artist"], dbus.Array):
             clear_data["artist"] = " - ".join(clear_data["artist"])
         # TODO: Convert all the dbus data types
-        if self._fetcher and clear_data.get("art_url"):
-            LOG.debug("fetching art url %s" % clear_data["art_url"])
-            try:
-                clear_data["cover"] = self._fetcher.fetch(
-                         clear_data["art_url"])
-            except Exception, exobj:
-                LOG.error("Fetching cover image failed: %s" % exobj)
         LOG.debug(str(clear_data))
         self._current_track = clear_data
-        self.track_changed.send(clear_data)
+        self.track_changed.send(**clear_data)
 
     def cb_key_handler(self, key):
         """Media key handler callback."""
@@ -284,13 +277,7 @@ def main():
         LOG.setLevel(logging.DEBUG)
     DBusGMainLoop(set_as_default=True)
     fetcher = None
-    if COVER:
-        if os.environ.has_key("XDG_CACHE_HOME"):
-            cache = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
-        else:
-            cache = os.path.join(os.environ.get("HOME", ""), ".cache", "spotty")
-        fetcher = SpotifyCoverFetcher(cache)
-    spotify = SpotifyControl(cover_fetcher=fetcher)
+    spotify = SpotifyControl()
     try:
         key_listener = MediaKeyListener()
         key_listener.add_handler(spotify.cb_key_handler)
@@ -300,6 +287,13 @@ def main():
     if NOTIFY:
         notifier = get_notificator()
         spotify.track_changed.connect(notifier.cb_track_changed)
+    if COVER:
+        if os.environ.has_key("XDG_CACHE_HOME"):
+            cache = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
+        else:
+            cache = os.path.join(os.environ.get("HOME", ""), ".cache", "spotty")
+        fetcher = SpotifyCoverFetcher(cache)
+        spotify.track_changed.connect(fetcher.cb_track_changed, priority=50)
 
     loop = gobject.MainLoop()
     signal.signal(signal.SIGINT, lambda *args: loop.quit())

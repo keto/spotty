@@ -64,5 +64,11 @@ class SpotifyCoverFetcher(object):
             LOG.debug("Cover in cache")
         return cover_file
 
+    def cb_track_changed(self, *_, **info):
+        """Track change callback listener."""
+        if info.has_key("art_url"):
+            LOG.debug("fetching art url %s" % info["art_url"])
+            return {"cover": self.fetch(info["art_url"])}
+
 if __name__ == "__main__":
     print(SpotifyCoverFetcher().fetch(sys.argv[1]))

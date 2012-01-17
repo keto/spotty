@@ -60,7 +60,7 @@ class SpottyNotify(object):
         self._notifyid = self.notifyservice.Notify(self._name, self._notifyid,
                 icon or self._icon, title, text, [], {}, timeout)
 
-    def cb_track_changed(self, info):
+    def cb_track_changed(self, *_, **info):
         """Spotty track_changed handler."""
         # TODO figure out what's up with the encoding
         artist = info.get("artist", u"").encode("latin-1")
