@@ -124,7 +124,6 @@ class SpotifyControl(object):
         self._fetcher = cover_fetcher
         self.spotifyservice = None
         self.connected = False
-        self.connect()
         self._current_track = None
         self.track_changed = Signal()
         self.state_changed = Signal()
@@ -140,7 +139,6 @@ class SpotifyControl(object):
         if not old and new:
             LOG.debug("Spotify appeared!")
             self.connect()
-            self.state_changed.send(True)
         elif old and not new:
             LOG.debug("Spotify went away")
             self.spotifyservice = None
@@ -158,6 +156,7 @@ class SpotifyControl(object):
             self.spotifyservice.connect_to_signal(
                     "PropertiesChanged", self._cb_track_changed)
             self.connected = True
+            self.state_changed.send(True)
         except Exception, exobj:
             LOG.error("Connection to Spotify failed: %s" % exobj)
         return self.connected
@@ -185,50 +184,86 @@ class SpotifyControl(object):
         self._current_track = clear_data
         self.track_changed.send(**clear_data)
 
-    def cb_key_handler(self, key):
-        """Media key handler callback."""
+    def _call_spotify(self, method):
         if not self.connected:
             LOG.debug("Not connected")
             return
-        if key not in MediaKeyListener.KEYS:
-            return
-        if key == "Play":
-            key = "PlayPause"
-        self.spotifyservice.get_dbus_method(key,
+        self.spotifyservice.get_dbus_method(method,
                 "org.mpris.MediaPlayer2.Player")()
+
+    def play_pause(self):
+        """Togle play/pause on spotify."""
+        self._call_spotify("PlayPause")
+
+    def next(self):
+        """Skip to next track."""
+        self._call_spotify("Next")
+
+    def previous(self):
+        """Skip to previous track."""
+        self._call_spotify("Previous")
+
+    def stop(self):
+        """Stop spotify."""
+        self._call_spotify("Stop")
+
+    def pause(self):
+        """Pause spotify."""
+        self._call_spotify("Pause")
+
 
 class MediaKeyListener():
     """Class for listening media key events."""
 
-    KEYS = ["Play", "Pause", "Stop", "Next", "Previous"]
+    # Mapping of keys to spotify control methods
+    KEY_MAP = {
+            "Play": "play_pause",
+            "Pause": "pause",
+            "Stop": "stop",
+            "Next": "next",
+            "Previous": "previous"}
 
-    def __init__(self):
-        self.handlers = []
-        self.bus = dbus.SessionBus()
-        self.bus_object = self.bus.get_object(
-                "org.gnome.SettingsDaemon",
-                "/org/gnome/SettingsDaemon/MediaKeys")
-        self.bus_object.GrabMediaPlayerKeys(
-                "Spotify", 0,
-                dbus_interface='org.gnome.SettingsDaemon.MediaKeys')
-        self.bus_object.connect_to_signal(
+    def __init__(self, spotify):
+        self._spotify = spotify
+        self._grabbed = False
+        self._bus = dbus.SessionBus()
+        self._interface = self._bus.get_object(
+                    "org.gnome.SettingsDaemon",
+                    "/org/gnome/SettingsDaemon/MediaKeys")
+        self._interface.connect_to_signal(
                 "MediaPlayerKeyPressed", self.cb_handle_mediakey)
 
-    def add_handler(self, handler):
-        """Register media key handler function."""
-        self.handlers.append(handler)
+    def cb_state_changed(self, state, *args, **kwargs):
+        if state and not self._grabbed:
+            LOG.debug("Grab media keys %s" % state)
+            self._interface.GrabMediaPlayerKeys(
+                    "spotty", 0,
+                    dbus_interface='org.gnome.SettingsDaemon.MediaKeys')
+            self._grabbed = True
+        elif not state and self._grabbed:
+            LOG.debug("Grab media keys %s" % state)
+            self._interface.ReleaseMediaPlayerKeys("spotty",
+                    dbus_interface='org.gnome.SettingsDaemon.MediaKeys')
+            self._grabbed = False
 
-    def cb_handle_mediakey(self, *mmkeys):
+    def cb_handle_mediakey(self, app, key):
         """Media key event callback."""
-        LOG.debug("Got keys %s" % str(mmkeys))
-        for key in mmkeys:
-            if key not in self.KEYS:
-                continue
-            for handler in self.handlers:
-                try:
-                    handler(key)
-                except Exception, exobj:
-                    LOG.error("Key handler %s failed: %s" % (handler, exobj))
+        LOG.debug("Media key event %s %s" % (app, key))
+        if app != "spotty":
+            return
+        if self._interface is None:
+            LOG.error("Disconnected, but got media key?!?!?!")
+            return
+        if key not in self.KEY_MAP:
+            LOG.debug("No method to handle key %s" % key)
+            return
+        action = getattr(self._spotify, self.KEY_MAP[key], None)
+        if action:
+            action()
+        else:
+            LOG.error("%s has no method %s" %
+                    (self._spotify, self.KEY_MAP[key]))
+
 
 class SpottyPlugin(object):
     """Spotty plugin base class."""
@@ -279,8 +314,8 @@ def main():
     fetcher = None
     spotify = SpotifyControl()
     try:
-        key_listener = MediaKeyListener()
-        key_listener.add_handler(spotify.cb_key_handler)
+        media_keys = MediaKeyListener(spotify)
+        spotify.state_changed.connect(media_keys.cb_state_changed)
     except Exception, exobj:
         LOG.error("MediaKeyListener failed: %s" % exobj)
 
@@ -295,6 +330,7 @@ def main():
         fetcher = SpotifyCoverFetcher(cache)
         spotify.track_changed.connect(fetcher.cb_track_changed, priority=50)
 
+    spotify.connect()
     loop = gobject.MainLoop()
     signal.signal(signal.SIGINT, lambda *args: loop.quit())
     loop.run()
