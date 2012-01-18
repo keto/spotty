@@ -62,10 +62,9 @@ class SpottyNotify(object):
 
     def cb_track_changed(self, *_, **info):
         """Spotty track_changed handler."""
-        # TODO figure out what's up with the encoding
-        artist = info.get("artist", u"").encode("latin-1")
-        title = info.get("title", u"").encode("latin-1")
-        album = info.get("album", u"").encode("latin-1")
+        artist = info.get("artist", u"")
+        title = info.get("title", u"")
+        album = info.get("album", u"")
         year = info.get("year", "")
         cover = info.get("cover", None)
         summary = "%s - %s" % (artist, title)
