@@ -16,6 +16,7 @@
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+# TODO Rewrite this with synchronous getting of track info
 """Spotty commandline interface."""
 
 import sys, gobject, logging, threading
@@ -28,11 +29,11 @@ def parse_opts():
     """Parses commandline arguments."""
     parser = OptionParser()
     parser.add_option("-n", "--next", action="store_const", dest="command",
-             const="Next")
+             const="next")
     parser.add_option("-p", "--previous", action="store_const", dest="command",
-             const="Previous")
-    parser.add_option("-P", "--paly", action="store_const", dest="command",
-             const="Play")
+             const="previous")
+    parser.add_option("-P", "--play", action="store_const", dest="command",
+             const="play_pause")
     parser.add_option("-q", "--quiet", action="store_true",
             help="Don't print track info")
     parser.add_option("-d", "--debug", action="store_true",
@@ -45,8 +46,9 @@ class SpottyCLI(threading.Thread):
         super(SpottyCLI, self).__init__()
         self._loop = gobject.MainLoop()
         self._spot = SpotifyControl()
-        self._spot.add_change_listener(self.cb_track_changed)
+        self._spot.track_changed.connect(self.cb_track_changed)
         self._quiet = quiet
+        self._spot.connect()
 
     def run(self):
         LOG.debug("Starting mainloop")
@@ -62,10 +64,13 @@ class SpottyCLI(threading.Thread):
     def send_command(self, command):
         """Send given command to Spotify."""
         LOG.debug("Sending command")
-        self._spot.cb_key_handler(command)
-        LOG.debug("Command sent")
+        if self._spot.connected:
+            getattr(self._spot, command)()
+            LOG.debug("Command sent")
+        else:
+            LOG.error("Failed to connect spotify")
 
-    def cb_track_changed(self, info):
+    def cb_track_changed(self, **info):
         """Spotty track_changed handler."""
         LOG.debug("Track changed")
         if not self._quiet:
@@ -88,7 +93,7 @@ def main():
     cli.start()
     cli.send_command(options.command)
     if options.command not in ["Previous"]:
-        cli.join(10)
+        cli.join(2)
     cli.terminate()
     return 0
 
