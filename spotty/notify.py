@@ -1,6 +1,5 @@
-#!/usr/bin/python -tt
 #
-#    Copyright 2010, 2011 Pami Ketolainen
+#    Copyright 2010, 2011, 2012 Pami Ketolainen
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -14,32 +13,37 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
-"""Notification helper class."""
-import dbus, os
+"""Plugin for desktop notifications"""
+import dbus
 
-from spotty import DEFAULT_ICON
+from spotty import DEFAULT_ICON, LOG
+from spotty.plugin import SpottyPlugin
 
-class SpottyNotify(object):
-    """Class for displaying info notifications."""
-    def __init__(self, name=None, default_icon=None):
+class Notify(SpottyPlugin):
+    """Plugin for displaying info notifications."""
+    def __init__(self, spotify):
         """Constructor.
         
         :param string name: Name of the notifications sender
         :param string default_icon: Path to default icon file
         """
-        self._name = name or "spotty"
-        self._icon = default_icon or DEFAULT_ICON
+        super(Notify, self).__init__(spotify)
+        self._icon = DEFAULT_ICON
         self._notifyservice = None
         self._notifyid = 0
+        self.spotify.track_changed.connect(self.cb_track_changed)
+
+    def unload(self):
+        self.spotify.track_changed.disconnect(self.cb_track_changed)
 
     @property
     def notifyservice(self):
         """Lazy binding to dbus notification interface."""
         if self._notifyservice == None:
             try:
-                bus = dbus.SessionBus()
-                proxy = bus.get_object(
+                proxy = self.spotify.bus.get_object(
                         "org.freedesktop.Notifications",
                         "/org/freedesktop/Notifications")
                 self._notifyservice = dbus.Interface(proxy,
@@ -57,7 +61,7 @@ class SpottyNotify(object):
         :param integer timeout: Notification timeout
         """
         # TODO handle exceptions
-        self._notifyid = self.notifyservice.Notify(self._name, self._notifyid,
+        self._notifyid = self.notifyservice.Notify("spotty", self._notifyid,
                 icon or self._icon, title, text, [], {}, timeout)
 
     def cb_track_changed(self, *_, **info):
@@ -71,11 +75,3 @@ class SpottyNotify(object):
         body = "%s\n%s" % (album, year and "(%s)" % year)
         self.send(summary, text=body, icon=cover)
 
-__notificator = None
-
-def get_notificator():
-    """Notificator 'singleton' helper."""
-    global __notificator
-    if not __notificator:
-        __notificator = SpottyNotify()
-    return __notificator

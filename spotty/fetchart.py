@@ -15,30 +15,37 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-"""Spotify album cover art fetching utility."""
+"""Cover art fetching plugin."""
 
-import urllib2
-import os
-import sys
+import urllib2, os, traceback
 
 from spotty import LOG
+from spotty.plugin import SpottyPlugin
 
 class CoverError(Exception):
     """Cover retrieval error class."""
     pass
 
-class SpotifyCoverFetcher(object):
-    """Spotify album art fetcher."""
-    def __init__(self, cache_dir=None):
-        """Constructor.
-        :param string cache_dir: Directory to use as cache for album covers
-        """
-        if cache_dir and not os.path.exists(cache_dir):
+class CoverFetcher(SpottyPlugin):
+    """Plugin for fetching album cover art."""
+    def __init__(self, spotify):
+        """Constructor."""
+        super(CoverFetcher, self).__init__(spotify)
+        if os.environ.has_key("XDG_CACHE_HOME"):
+            cache_dir = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
+        else:
+            cache_dir = os.path.join(
+                    os.environ.get("HOME", ""), ".cache", "spotty")
+        if not os.path.exists(cache_dir):
             try:
                 os.mkdir(cache_dir)
             except OSError:
                 self._cache = None
         self._cache = cache_dir
+        self.spotify.track_changed.connect(self.cb_track_changed, priority=50)
+
+    def unload(self):
+        self.spotify.track_changed.disconnect(self.cb_track_changed)
 
     def _check_cache(self, file_id):
         """Get image from cache if exists."""
@@ -58,8 +65,9 @@ class SpotifyCoverFetcher(object):
             LOG.debug("Downloading %s", url)
             try:
                 open(cover_file, "w").write(urllib2.urlopen(url).read())
-            except Exception, exobj:
-                raise CoverError("Failed to download: %s" % exobj)
+            except Exception:
+                LOG.error("Failed to download: %s", url)
+                traceback.print_exc()
         else:
             LOG.debug("Cover in cache")
         return cover_file
@@ -69,6 +77,3 @@ class SpotifyCoverFetcher(object):
         if info.has_key("art_url"):
             LOG.debug("fetching art url %s" % info["art_url"])
             return {"cover": self.fetch(info["art_url"])}
-
-if __name__ == "__main__":
-    print(SpotifyCoverFetcher().fetch(sys.argv[1]))

@@ -22,19 +22,13 @@
 
 """Various Spotify controller related classes."""
 
-import dbus, gobject, os, signal, logging
+import dbus, gobject, signal, logging, traceback
 from optparse import OptionParser
 from dbus.mainloop.glib import DBusGMainLoop
 
+import pkg_resources
+
 from spotty import LOG
-from spotty.fetchart import SpotifyCoverFetcher
-from spotty.notify import get_notificator
-
-
-# Set to False to disable notifications
-NOTIFY = True
-# Set to false to disable cover fetching
-COVER = True
 
 # Mappings for xesam keys and simpler ones used internally
 META_MAP = {"album": "xesam:album",
@@ -95,16 +89,16 @@ class Signal(object):
         self.listeners.sort()
 
     def disconnect(self, callback):
+        """Disconnect listener from this signal.
+        :param callback: The earlier connected callback
+        """
         cb_id = str(callback)
         for index, listener in enumerate(self.listeners):
             if str(listener) == cb_id:
                 self.listeners.pop(index)
 
     def send(self, *args, **kwargs):
-        """Dispatch signal
-        Takes list of keyword arguments to pass to listener
-        raises TypeError if bad argumen names provided
-        """
+        """Dispatch signal."""
         for listener in self.listeners:
             new_args = listener(*args, **kwargs)
             if isinstance(new_args, dict):
@@ -113,20 +107,19 @@ class Signal(object):
 class SpotifyControl(object):
     """Class for controlling spotify through DBus."""
 
-    def __init__(self, cover_fetcher=None):
+    def __init__(self):
         """Constructor."""
         self.bus = dbus.SessionBus()
+        self.spotifyservice = None
+        self.connected = False
+        self.track_changed = Signal()
+        self.state_changed = Signal()
+        self._current_track = None
         # Register listener for spotify start up
         proxy = self.bus.get_object("org.freedesktop.DBus",
                 "/org/freedesktop/DBus")
         proxy.connect_to_signal("NameOwnerChanged",
                 self._cb_spotify_spy)
-        self._fetcher = cover_fetcher
-        self.spotifyservice = None
-        self.connected = False
-        self._current_track = None
-        self.track_changed = Signal()
-        self.state_changed = Signal()
 
     def _cb_spotify_spy(self, *args):
         """DBus listener for spying spotify start/quit."""
@@ -185,6 +178,7 @@ class SpotifyControl(object):
         self.track_changed.send(**clear_data)
 
     def _call_spotify(self, method):
+        """Helper to call spotify method."""
         if not self.connected:
             LOG.debug("Not connected")
             return
@@ -211,92 +205,6 @@ class SpotifyControl(object):
         """Pause spotify."""
         self._call_spotify("Pause")
 
-
-class MediaKeyListener():
-    """Class for listening media key events."""
-
-    # Mapping of keys to spotify control methods
-    KEY_MAP = {
-            "Play": "play_pause",
-            "Pause": "pause",
-            "Stop": "stop",
-            "Next": "next",
-            "Previous": "previous"}
-
-    def __init__(self, spotify):
-        self._spotify = spotify
-        self._grabbed = False
-        self._bus = dbus.SessionBus()
-        self._interface = self._bus.get_object(
-                    "org.gnome.SettingsDaemon",
-                    "/org/gnome/SettingsDaemon/MediaKeys")
-        self._interface.connect_to_signal(
-                "MediaPlayerKeyPressed", self.cb_handle_mediakey)
-
-    def cb_state_changed(self, state, *args, **kwargs):
-        if state and not self._grabbed:
-            LOG.debug("Grab media keys %s" % state)
-            self._interface.GrabMediaPlayerKeys(
-                    "spotty", 0,
-                    dbus_interface='org.gnome.SettingsDaemon.MediaKeys')
-            self._grabbed = True
-        elif not state and self._grabbed:
-            LOG.debug("Grab media keys %s" % state)
-            self._interface.ReleaseMediaPlayerKeys("spotty",
-                    dbus_interface='org.gnome.SettingsDaemon.MediaKeys')
-            self._grabbed = False
-
-    def cb_handle_mediakey(self, app, key):
-        """Media key event callback."""
-        LOG.debug("Media key event %s %s" % (app, key))
-        if app != "spotty":
-            return
-        if self._interface is None:
-            LOG.error("Disconnected, but got media key?!?!?!")
-            return
-        if key not in self.KEY_MAP:
-            LOG.debug("No method to handle key %s" % key)
-            return
-        action = getattr(self._spotify, self.KEY_MAP[key], None)
-        if action:
-            action()
-        else:
-            LOG.error("%s has no method %s" %
-                    (self._spotify, self.KEY_MAP[key]))
-
-
-class SpottyPlugin(object):
-    """Spotty plugin base class."""
-    # Plugins are singletons
-    __instance = None
-    #: Used to specify other required plugins
-    requires = []
-
-    @classmethod
-    def load(cls, controller):
-        """Plugin loader.
-        :param controller: The SpotifyControl instance
-        :returns: Plugin instance
-        """
-        if cls == SpottyPlugin:
-            raise RuntimeError("Tried to load plain base plugin")
-        if not cls.is_loaded():
-            cls.__instance = cls(controller)
-        return cls.__instance
-
-    @classmethod
-    def is_loaded(cls):
-        return cls.__instance is not None
-
-    def __init__(self, controller):
-        """Constructor."""
-        pass
-
-    def unload(self):
-        """Plugin unloader."""
-        pass
-
-
 def parse_args():
     """Parses commandline arguments."""
     parser = OptionParser()
@@ -311,29 +219,36 @@ def main():
     if options.debug:
         LOG.setLevel(logging.DEBUG)
     DBusGMainLoop(set_as_default=True)
-    fetcher = None
     spotify = SpotifyControl()
-    try:
-        media_keys = MediaKeyListener(spotify)
-        spotify.state_changed.connect(media_keys.cb_state_changed)
-    except Exception, exobj:
-        LOG.error("MediaKeyListener failed: %s" % exobj)
-
-    if NOTIFY:
-        notifier = get_notificator()
-        spotify.track_changed.connect(notifier.cb_track_changed)
-    if COVER:
-        if os.environ.has_key("XDG_CACHE_HOME"):
-            cache = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
-        else:
-            cache = os.path.join(os.environ.get("HOME", ""), ".cache", "spotty")
-        fetcher = SpotifyCoverFetcher(cache)
-        spotify.track_changed.connect(fetcher.cb_track_changed, priority=50)
-
+    # Load plugins
+    enabled = ["GnomeMediaKeys", "Notify", "CoverFetcher"]
+    plugins = {}
+    LOG.debug("Loading plugins...")
+    for entry in pkg_resources.iter_entry_points("spotty.plugin"):
+        plugin = entry.load()
+        if plugin.__name__ not in enabled:
+            LOG.debug("%s not enabled, skipping...", plugin.__name__)
+            continue
+        LOG.debug("Loading plugin %s", plugin.__name__)
+        try:
+            plugins[plugin.__name__] = plugin.load(spotify)
+        except Exception:
+            LOG.error("Failed to load %s", plugin.__name__)
+            traceback.print_exc()
+    
+    # Start the mainloop
     spotify.connect()
     loop = gobject.MainLoop()
     signal.signal(signal.SIGINT, lambda *args: loop.quit())
     loop.run()
+    # Unload plugins
+    for name, plugin in plugins.iteritems():
+        LOG.debug("Unloading %s", name)
+        try:
+            plugin.unload()
+        except Exception:
+            LOG.error("Failed to unload %s", name)
+            traceback.print_exc()
 
 if __name__ == "__main__":
     main()
