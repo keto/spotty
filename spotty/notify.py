@@ -1,5 +1,5 @@
 #
-#    Copyright 2010, 2011, 2012 Pami Ketolainen
+#    Copyright 2010 - 2012 Pami Ketolainen
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -16,6 +16,7 @@
 #
 
 """Plugin for desktop notifications"""
+
 import dbus
 
 from spotty import DEFAULT_ICON, LOG

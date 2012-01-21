@@ -1,6 +1,5 @@
-#!/usr/bin/python -tt
 #
-#    Copyright 2010 Pami Ketolainen
+#    Copyright 2010 - 2012 Pami Ketolainen
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -14,6 +13,7 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
 
 """Cover art fetching plugin."""
 
