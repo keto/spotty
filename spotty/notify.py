@@ -17,7 +17,7 @@
 
 """Plugin for desktop notifications"""
 
-import dbus
+import dbus, sys
 
 from spotty import DEFAULT_ICON, LOG
 from spotty.plugin import SpottyPlugin
@@ -49,8 +49,9 @@ class Notify(SpottyPlugin):
                         "/org/freedesktop/Notifications")
                 self._notifyservice = dbus.Interface(proxy,
                         "org.freedesktop.Notifications")
-            except Exception, exobj:
-                LOG.error("Notification service connectin failed: %s" % exobj)
+            except Exception:
+                exc = sys.exc_info()[1]
+                LOG.error("Notification service connectin failed: %s", exc)
         return self._notifyservice
 
     def send(self, title, text="", icon=None, timeout=3000):

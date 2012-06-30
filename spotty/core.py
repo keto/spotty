@@ -23,7 +23,7 @@
 
 """Various Spotify controller related classes."""
 
-import dbus, gobject, signal, logging, traceback
+import dbus, gobject, signal, logging, traceback, sys
 from optparse import OptionParser
 from dbus.mainloop.glib import DBusGMainLoop
 
@@ -56,7 +56,8 @@ class Listener(object):
     def __call__(self, *args, **kwargs):
         try:
             return self._callback(*args, **kwargs)
-        except Exception as exc:
+        except Exception:
+            exc = sys.exc_info()[0]
             LOG.error("Listener %s (%s, %s) failed:%s" %
                     (self, args, kwargs, exc))
             if not self._ignore_errors:
@@ -151,8 +152,9 @@ class SpotifyControl(object):
                     "PropertiesChanged", self._cb_track_changed)
             self.connected = True
             self.state_changed.send(True)
-        except Exception, exobj:
-            LOG.error("Connection to Spotify failed: %s" % exobj)
+        except Exception:
+            exc = sys.exc_info()[1]
+            LOG.error("Connection to Spotify failed: %s" % exc)
         return self.connected
 
     def _cb_track_changed(self, *args):
