@@ -3,7 +3,7 @@ from setuptools import setup, find_packages
 
 setup(
     name = "spotty",
-    version = open("debian/changelog").readline().split()[1][1:-1],
+    version = "0.2.0",
     author = "Pami Ketolainen",
     author_email = "pami.ketolainen@gmail.com",
     description = "Spotify Linux desktop integration",

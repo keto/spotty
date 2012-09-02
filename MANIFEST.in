@@ -1,1 +1,3 @@
 include spotty/icon_spotify.png
+include spotty.desktop
+include spotty.png
