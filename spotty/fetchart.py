@@ -63,12 +63,12 @@ class CoverFetcher(SpottyPlugin):
     def fetch(self, url):
         """Fetch cover image based on URL."""
         _, file_name = os.path.split(url)
-        LOG.debug("Fetching cover file %s", file_name);
+        LOG.debug("Cover file %s", file_name);
         cover_file, exists = self._check_cache(file_name)
         if not exists:
             LOG.debug("Downloading %s", url)
             try:
-                open(cover_file, "w").write(urllib2.urlopen(url).read())
+                open(cover_file, "wb").write(urlopen(url).read())
             except Exception:
                 LOG.error("Failed to download: %s", url)
                 traceback.print_exc()
@@ -80,5 +80,5 @@ class CoverFetcher(SpottyPlugin):
         """Track change callback listener."""
         art_url = info.get("art_url", "")
         if art_url:
-            LOG.debug("fetching art url %s" % art_url)
+            LOG.debug("Fetching art url %s" % art_url)
             return {"cover": self.fetch(art_url)}
