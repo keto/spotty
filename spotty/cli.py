@@ -1,4 +1,4 @@
-#!/usr/bin/python -tt
+#!/usr/bin/env python -tt
 #
 #    Copyright 2010 Pami Ketolainen
 #

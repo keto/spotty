@@ -17,7 +17,11 @@
 
 """Cover art fetching plugin."""
 
-import urllib2, os, traceback
+import os, traceback
+try:
+    from urllib.request import urlopen
+except ImportError:
+    from urllib import urlopen
 
 from spotty import LOG
 from spotty.plugin import SpottyPlugin
@@ -31,15 +35,14 @@ class CoverFetcher(SpottyPlugin):
     def __init__(self, spotify):
         """Constructor."""
         super(CoverFetcher, self).__init__(spotify)
-        if os.environ.has_key("XDG_CACHE_HOME"):
-            cache_dir = os.path.join(os.environ["XDG_CACHE_HOME"], "spotty")
-        else:
-            cache_dir = os.path.join(
-                    os.environ.get("HOME", ""), ".cache", "spotty")
+        cache_base = os.environ.get("XDG_CACHE_HOME") or os.path.join(
+                os.environ.get("HOME", ""), ".cache")
+        cache_dir = os.path.join(cache_base, "spotty")
         if not os.path.exists(cache_dir):
             try:
                 os.mkdir(cache_dir)
             except OSError:
+                LOG.error("Failed to create cache dir %s", cache_dir)
                 self._cache = None
         self._cache = cache_dir
         self.spotify.track_changed.connect(self.cb_track_changed, priority=50)
@@ -60,6 +63,7 @@ class CoverFetcher(SpottyPlugin):
     def fetch(self, url):
         """Fetch cover image based on URL."""
         _, file_name = os.path.split(url)
+        LOG.debug("Fetching cover file %s", file_name);
         cover_file, exists = self._check_cache(file_name)
         if not exists:
             LOG.debug("Downloading %s", url)
@@ -74,6 +78,7 @@ class CoverFetcher(SpottyPlugin):
 
     def cb_track_changed(self, *_, **info):
         """Track change callback listener."""
-        if info.has_key("art_url"):
-            LOG.debug("fetching art url %s" % info["art_url"])
-            return {"cover": self.fetch(info["art_url"])}
+        art_url = info.get("art_url", "")
+        if art_url:
+            LOG.debug("fetching art url %s" % art_url)
+            return {"cover": self.fetch(art_url)}

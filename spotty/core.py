@@ -1,4 +1,4 @@
-#!/usr/bin/python -tt
+#!/usr/bin/env python -tt
 #
 #    Copyright 2010 - 2012 Pami Ketolainen
 #
@@ -23,7 +23,13 @@
 
 """Various Spotify controller related classes."""
 
-import dbus, gobject, signal, logging, traceback, sys
+import dbus, signal, logging, traceback, sys
+try:
+    from gi.repository import GObject as gobject
+except ImportError:
+    import gobject
+
+
 from optparse import OptionParser
 from dbus.mainloop.glib import DBusGMainLoop
 
@@ -67,7 +73,20 @@ class Listener(object):
         if not isinstance(obj, Listener):
             raise TypeError("can't compare %s to %s" %
                     (type(self), type(obj)))
-        return cmp(self._priority, obj._priority)
+        return (self._priority > obj._priority) - (self._priority < obj._priority)
+    def __lt__(self, obj):
+        return self.__cmp__(obj) < 0
+    def __le__(self, obj):
+        return self.__cmp__(obj) <= 0
+    def __eq__(self, obj):
+        return self.__cmp__(obj) == 0
+    def __ne__(self, obj):
+        return self.__cmp__(obj) != 0
+    def __ge__(self, obj):
+        return self.__cmp__(obj) >= 0
+    def __gt__(self, obj):
+        return self.__cmp__(obj) > 0
+
 
     def __str__(self):
         return str(self._callback)
@@ -245,10 +264,10 @@ def main():
     signal.signal(signal.SIGINT, lambda *args: loop.quit())
     loop.run()
     # Unload plugins
-    for name, plugin in plugins.iteritems():
+    for name in plugins:
         LOG.debug("Unloading %s", name)
         try:
-            plugin.unload()
+            plugins[name].unload()
         except Exception:
             LOG.error("Failed to unload %s", name)
             traceback.print_exc()
