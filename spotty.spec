@@ -19,7 +19,7 @@ Url: https://github.com/keto/spotty
 BuildRequires: python-setuptools
 Requires: python-setuptools
 Requires: dbus-python
-Requires: spotify-client-qt >= 1:0.6
+Requires: spotify-client >= 0.8
     
 
 %description
@@ -34,6 +34,8 @@ python setup.py build
 %install
 python setup.py install --single-version-externally-managed -O1 --root=$RPM_BUILD_ROOT --record=INSTALLED_FILES
 install -m 755 -d %{buildroot}/%{_datadir}
+install -m 755 -d %{buildroot}/%{_datadir}/pixmaps
+install -m 755 -d %{buildroot}/%{_datadir}/applications
 install spotty.png %{buildroot}/%{_datadir}/pixmaps
 install spotty.desktop %{buildroot}/%{_datadir}/applications
 
@@ -42,3 +44,5 @@ rm -rf $RPM_BUILD_ROOT
 
 %files -f INSTALLED_FILES
 %defattr(-,root,root)
+%{_datadir}/pixmaps/spotty.png
+%{_datadir}/applications/spotty.desktop
